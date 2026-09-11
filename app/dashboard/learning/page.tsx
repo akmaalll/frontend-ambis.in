@@ -12,7 +12,7 @@ const learningPaths = [
     subject: 'matematika',
     description: 'Pembelajaran Matematika dari Dasar hingga Lanjutan. Pelajari aljabar, geometri, kalkulus, dan statistik dengan materi yang terstruktur.',
     moduleCount: 4,
-    icon: '🔢',
+    icon: '',
   },
   {
     id: 'informatika',
@@ -20,7 +20,7 @@ const learningPaths = [
     subject: 'informatika',
     description: 'Pembelajaran Informatika dan Pemrograman. Pelajari dasar-dasar pemrograman, algoritma, struktur data, dan web development.',
     moduleCount: 5,
-    icon: '💻',
+    icon: '',
   },
 ];
 
@@ -50,7 +50,7 @@ export default function LearningPathsPage() {
         <div className="max-w-6xl mx-auto">
           <div className="mb-6 md:mb-10">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 md:mb-3">
-              📚 Learning Path
+             Learning Path
             </h1>
             <p className="text-sm md:text-base text-gray-600">
               Pilih topik pembelajaran untuk memulai perjalanan belajarmu
@@ -62,7 +62,7 @@ export default function LearningPathsPage() {
               <div
                 key={path.id}
                 onClick={() => handlePathClick(path.subject)}
-                className="group bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 p-4 md:p-6 border-l-4 border-blue-500 hover:border-purple-500 cursor-pointer hover:-translate-y-1"
+                className="group bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 p-4 md:p-6  cursor-pointer hover:-translate-y-1"
               >
                 <div className="flex items-start justify-between mb-3 md:mb-4">
                   <div className="text-4xl md:text-5xl group-hover:scale-110 transition-transform">
@@ -148,7 +148,7 @@ export default function LearningPathsPage() {
             onClick={() => setShowPersonalityModal(true)}
             className="w-full mt-6 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
           >
-            <span className="text-2xl">🎯</span>
+            {/* <span className="text-2xl">🎯</span> */}
             <div className="text-left">
               <p className="font-semibold">Personalisasi Gaya Belajar</p>
               <p className="text-sm text-white/80">Sesuaikan pengalaman belajarmu</p>

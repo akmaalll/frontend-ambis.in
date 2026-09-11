@@ -285,8 +285,8 @@ export default function HomePage() {
             <button
               onClick={() => setShowPersonalityModal(true)}
               className="w-full mt-4 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
-            >
-              <span className="text-2xl">🎯</span>
+              >
+                {/* <span className="text-2xl">🎯</span> */}
               <div className="text-left">
                 <p className="font-semibold">Personalisasi Gaya Belajar</p>
                 <p className="text-sm text-white/80">Sesuaikan pengalaman belajarmu</p>
