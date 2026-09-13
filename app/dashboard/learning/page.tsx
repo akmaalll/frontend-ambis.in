@@ -45,7 +45,7 @@ export default function LearningPathsPage() {
   };
 
   return (
-    <MainLayout onNewChat={handleNewChat}>
+    <MainLayout onNewChat={handleNewChat} closeSidebarOnMount={true}>
       <div className="p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="mb-6 md:mb-10">

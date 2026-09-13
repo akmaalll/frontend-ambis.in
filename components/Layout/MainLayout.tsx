@@ -31,6 +31,7 @@ interface MainLayoutProps {
     updatedAt: Date;
   }>;
   activeChatId?: string;
+  closeSidebarOnMount?: boolean;
 }
 
 const CHAT_HISTORY_KEY = 'ambisin_chat_history';
@@ -58,7 +59,7 @@ function loadChatHistoryFromStorage(): Array<{
   return [];
 }
 
-export default function MainLayout({ children, userName, onLogout, onNewChat, onSelectChat, onLearningPathClick, showSidebar = true, chats: propChats, activeChatId }: MainLayoutProps) {
+export default function MainLayout({ children, userName, onLogout, onNewChat, onSelectChat, onLearningPathClick, showSidebar = true, chats: propChats, activeChatId, closeSidebarOnMount = false }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [localChats, setLocalChats] = useState<Array<{
@@ -76,7 +77,11 @@ export default function MainLayout({ children, userName, onLogout, onNewChat, on
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       if (!mobile) {
-        setSidebarOpen(true);
+        if (closeSidebarOnMount) {
+          setSidebarOpen(false);
+        } else {
+          setSidebarOpen(true);
+        }
       } else {
         setSidebarOpen(false);
       }
@@ -84,7 +89,7 @@ export default function MainLayout({ children, userName, onLogout, onNewChat, on
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  }, [closeSidebarOnMount]);
 
   // Load chat history from localStorage if no prop provided
   useEffect(() => {
