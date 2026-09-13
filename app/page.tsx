@@ -125,7 +125,7 @@ export default function HomePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleInitialQuestionsSubmit = (answers: { goal: string; interest: string; level: string }) => {
+  const handleInitialQuestionsSubmit = (answers: { goal: string; topic: string; subtopic: string; difficulty: string }) => {
     localStorage.setItem('hasCompletedInitialQuestions', 'true');
     localStorage.setItem('initialAnswers', JSON.stringify(answers));
     setHasAnsweredQuestions(true);

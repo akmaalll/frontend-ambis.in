@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 interface InitialQuestionsModalProps {
   isOpen: boolean;
@@ -9,16 +8,69 @@ interface InitialQuestionsModalProps {
   onSkip?: () => void;
   onSubmit: (answers: {
     goal: string;
-    interest: string;
-    level: string;
+    topic: string;
+    subtopic: string;
+    difficulty: string;
   }) => void;
 }
 
 interface Answers {
   goal: string;
-  interest: string;
-  level: string;
+  topic: string;
+  subtopic: string;
+  difficulty: string;
 }
+
+const topics = [
+  {
+    id: 'matematika',
+    label: 'Matematika',
+    icon: '🔢',
+    subtopics: [
+      { id: 'aljabar', label: 'Aljabar', desc: 'Persamaan, pertidaksamaan, dan fungsi' },
+      { id: 'geometri', label: 'Geometri', desc: 'Bangun ruang, luas, dan volume' },
+      { id: 'statistika', label: 'Statistika', desc: 'Mean, median, modus, dan probabilitas' },
+      { id: 'kalkulus', label: 'Kalkulus Dasar', desc: 'Limit, turunan, dan integral' },
+      { id: 'trigonometri', label: 'Trigonometri', desc: 'Sin, cos, tan dan aplikasinya' },
+    ],
+  },
+  {
+    id: 'informatika',
+    label: 'Informatika',
+    icon: '💻',
+    subtopics: [
+      { id: 'pemrograman-dasar', label: 'Pemrograman Dasar', desc: 'Variabel, tipe data, dan operator' },
+      { id: 'algoritma', label: 'Algoritma', desc: 'Flowchart, pseudocode, dan logika' },
+      { id: 'web-dasar', label: 'Web Development', desc: 'HTML, CSS, dan JavaScript' },
+      { id: 'struktur-data', label: 'Struktur Data', desc: 'Array, linked list, dan stack' },
+      { id: 'database', label: 'Database', desc: 'SQL dan relational database' },
+    ],
+  },
+];
+
+const difficulties = [
+  {
+    id: 'beginner',
+    label: 'Pemula',
+    icon: '🌱',
+    desc: 'Belajar dari nol, cocok untuk yang baru kenal topik ini',
+    detail: 'Penjelasan step-by-step, banyak contoh, dan latihan dasar',
+  },
+  {
+    id: 'intermediate',
+    label: 'Menengah',
+    icon: '🚀',
+    desc: 'Sudah paham dasar, ingin memperdalam pemahaman',
+    detail: 'Latihan lebih kompleks, studi kasus, dan proyek kecil',
+  },
+  {
+    id: 'advanced',
+    label: 'Lanjutan',
+    icon: '🔥',
+    desc: 'Sudah menguasai topik, ingin tantangan lebih',
+    detail: 'Soal olimpiade, proyek kompleks, dan analisis mendalam',
+  },
+];
 
 export function InitialQuestionsModal({
   isOpen,
@@ -28,19 +80,18 @@ export function InitialQuestionsModal({
 }: InitialQuestionsModalProps) {
   const [answers, setAnswers] = useState<Answers>({
     goal: '',
-    interest: '',
-    level: '',
+    topic: '',
+    subtopic: '',
+    difficulty: '',
   });
   const [step, setStep] = useState(0);
-  const router = useRouter();
 
   if (!isOpen) return null;
 
   const handleNext = () => {
-    if (step < 2) {
+    if (step < 3) {
       setStep(step + 1);
     } else {
-      // Submit answers
       onSubmit(answers);
       onClose();
     }
@@ -58,189 +109,194 @@ export function InitialQuestionsModal({
   };
 
   const goals = [
-    'Pengembangan Karir',
-    'Hobi Personal',
-    'Kuliah',
-    'Lainnya',
+    { id: 'pr', label: 'Ngerjain PR', icon: '📝', desc: 'Ada tugas sekolah yang harus dikerjakan' },
+    { id: 'konsep', label: 'Paham Konsep', icon: '💡', desc: 'Mau belajar dan memahami materi dengan baik' },
   ];
 
-  const interests = [
-    { value: 'matematika', label: 'Matematika' },
-    { value: 'informatika', label: 'Informatika' },
-    { value: 'keduanya', label: 'Keduanya' },
-  ];
+  const selectedTopic = topics.find((t) => t.id === answers.topic);
 
-  const levels = ['Pemula', 'Menengah', 'Lanjutan'];
+  const canProceed =
+    (step === 0 && answers.goal !== '') ||
+    (step === 1 && answers.topic !== '') ||
+    (step === 2 && answers.subtopic !== '') ||
+    (step === 3 && answers.difficulty !== '');
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="p-4 sm:p-6 border-b border-gray-100">
-          <div className="flex items-center gap-3 mb-3 sm:mb-4">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm sm:text-base">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto no-scrollbar">
+        {/* Header - Sticky */}
+        <div className="p-6 border-b-2 border-gray-100 bg-blue-600 rounded-t-2xl relative sticky top-0 z-10">
+          <button
+            onClick={handleSkip}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-2xl">
               🚀
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-              Mari Kita Mulai!
-            </h2>
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                Mari Kita Mulai!
+              </h2>
+              <p className="text-blue-100 text-sm">
+                Langkah {step + 1} dari 4
+              </p>
+            </div>
           </div>
-          <p className="text-gray-600 text-sm sm:text-base">
-            Jawab 3 pertanyaan singkat untuk personalize pengalaman belajarmu
-          </p>
-        </div>
 
-        {/* Progress Steps */}
-        <div className="px-4 sm:px-6 py-4 bg-gray-50">
-          <div className="flex items-center gap-2">
-            {[0, 1, 2].map((s) => (
+          {/* Progress bar */}
+          <div className="flex gap-2">
+            {[0, 1, 2, 3].map((s) => (
               <div
                 key={s}
                 className={`h-2 flex-1 rounded-full transition-all ${
-                  s <= step ? 'bg-blue-600' : 'bg-gray-200'
+                  s <= step ? 'bg-white' : 'bg-white/30'
                 }`}
               />
             ))}
           </div>
         </div>
 
-        {/* Questions */}
-        <div className="px-4 sm:px-6 py-4 sm:py-6">
+        {/* Content */}
+        <div className="p-6">
           {/* Step 0: Tujuan Belajar */}
           {step === 0 && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                1. Apa tujuan utama Anda belajar?
+                Apa tujuan kamu belajar? 🎯
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {goals.map((goal) => (
-                  <label
-                    key={goal}
-                    className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition ${
-                      answers.goal === goal
+                  <button
+                    key={goal.id}
+                    onClick={() => setAnswers((prev) => ({ ...prev, goal: goal.id }))}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-120 text-left ${
+                      answers.goal === goal.id
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <input
-                      type="radio"
-                      name="goal"
-                      value={goal}
-                      checked={answers.goal === goal}
-                      onChange={(e) =>
-                        setAnswers({ ...answers, goal: e.target.value })
-                      }
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-3 text-gray-700">{goal}</span>
-                  </label>
+                    <span className="text-3xl">{goal.icon}</span>
+                    <div>
+                      <p className="font-semibold text-gray-900">{goal.label}</p>
+                      <p className="text-sm text-gray-500">{goal.desc}</p>
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Step 1: Topik Interest */}
+          {/* Step 1: Pilih Topik */}
           {step === 1 && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                2. Topik apa yang paling Anda minati?
+                Pilih topik besar 📚
               </h3>
-              <div className="space-y-2">
-                {interests.map((interest) => (
-                  <label
-                    key={interest.value}
-                    className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition ${
-                      answers.interest === interest.value
+              <div className="space-y-3">
+                {topics.map((topic) => (
+                  <button
+                    key={topic.id}
+                    onClick={() => setAnswers((prev) => ({ ...prev, topic: topic.id, subtopic: '' }))}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-120 text-left ${
+                      answers.topic === topic.id
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <input
-                      type="radio"
-                      name="interest"
-                      value={interest.value}
-                      checked={answers.interest === interest.value}
-                      onChange={(e) =>
-                        setAnswers({
-                          ...answers,
-                          interest: e.target.value,
-                        })
-                      }
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-3 text-gray-700">
-                      {interest.label}
-                    </span>
-                  </label>
+                    <span className="text-3xl">{topic.icon}</span>
+                    <div>
+                      <p className="font-semibold text-gray-900">{topic.label}</p>
+                      <p className="text-sm text-gray-500">{topic.subtopics.length} sub-topik tersedia</p>
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Step 2: Level */}
-          {step === 2 && (
+          {/* Step 2: Pilih Sub-topik */}
+          {step === 2 && selectedTopic && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                3. Level kesulitan yang sesuai?
+                Pilih sub-topik spesifik di {selectedTopic.label} 📖
               </h3>
-              <div className="space-y-2">
-                {levels.map((level) => (
-                  <label
-                    key={level}
-                    className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition ${
-                      answers.level === level
+              <div className="space-y-3">
+                {selectedTopic.subtopics.map((sub) => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setAnswers((prev) => ({ ...prev, subtopic: sub.id }))}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-120 text-left ${
+                      answers.subtopic === sub.id
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <input
-                      type="radio"
-                      name="level"
-                      value={level}
-                      checked={answers.level === level}
-                      onChange={(e) =>
-                        setAnswers({ ...answers, level: e.target.value })
-                      }
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-3 text-gray-700">{level}</span>
-                  </label>
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-lg font-bold text-blue-600">
+                      {sub.label.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{sub.label}</p>
+                      <p className="text-sm text-gray-500">{sub.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Level Kesulitan */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Pilih level kesulitan ⚡
+              </h3>
+              <div className="space-y-3">
+                {difficulties.map((diff) => (
+                  <button
+                    key={diff.id}
+                    onClick={() => setAnswers((prev) => ({ ...prev, difficulty: diff.id }))}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all duration-120 text-left ${
+                      answers.difficulty === diff.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-3xl">{diff.icon}</span>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900">{diff.label}</p>
+                      <p className="text-sm text-gray-500">{diff.desc}</p>
+                      {answers.difficulty === diff.id && (
+                        <p className="text-xs mt-2 text-blue-600 font-medium">{diff.detail}</p>
+                      )}
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* Navigation Buttons */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+        {/* Footer - Sticky */}
+        <div className="p-6 border-t-2 border-gray-100 flex justify-between items-center sticky bottom-0 bg-white">
           <button
-            onClick={handleSkip}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition"
+            onClick={step === 0 ? handleSkip : handleBack}
+            className="px-4 py-2 text-gray-500 hover:text-gray-700 font-medium transition"
           >
-            Lewati
+            {step === 0 ? 'Lewati' : 'Kembali'}
           </button>
 
-          <div className="flex gap-3">
-            {step > 0 && (
-              <button
-                onClick={handleBack}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition"
-              >
-                Kembali
-              </button>
-            )}
-            <button
-              onClick={handleNext}
-              disabled={
-                (step === 0 && !answers.goal) ||
-                (step === 1 && !answers.interest) ||
-                (step === 2 && !answers.level)
-              }
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-medium"
-            >
-              {step === 2 ? 'Mulai Belajar →' : 'Lanjut'}
-            </button>
-          </div>
+          <button
+            onClick={handleNext}
+            disabled={!canProceed}
+            className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold transition-all duration-120"
+          >
+            {step === 3 ? 'Mulai Belajar!' : 'Lanjut'}
+          </button>
         </div>
       </div>
     </div>
