@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 interface HeaderProps {
   userName?: string;
@@ -9,6 +12,21 @@ interface HeaderProps {
 }
 
 export function Header({ userName, onLogout, onSidebarToggle, sidebarOpen = true, isMobile = false }: HeaderProps) {
+  const [overallProgress, setOverallProgress] = useState(0);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('ambisin_student_progress');
+    if (stored) {
+      try {
+        const concepts: Array<{ progress: number }> = JSON.parse(stored);
+        const avg = concepts.length > 0 
+          ? Math.round(concepts.reduce((sum, c) => sum + c.progress, 0) / concepts.length)
+          : 0;
+        setOverallProgress(avg);
+      } catch { /* ignore */ }
+    }
+  }, []);
+
   return (
     <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-2 md:gap-4">
@@ -48,6 +66,40 @@ export function Header({ userName, onLogout, onSidebarToggle, sidebarOpen = true
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Dashboard Link */}
+        <Link
+          href="/dashboard/progress"
+          className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all group"
+        >
+          <div className="relative w-8 h-8">
+            <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 36 36">
+              <circle
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke="#e5e7eb"
+                strokeWidth="3"
+              />
+              <circle
+                cx="18"
+                cy="18"
+                r="14"
+                fill="none"
+                stroke={overallProgress >= 75 ? '#22c55e' : overallProgress >= 50 ? '#3b82f6' : overallProgress >= 25 ? '#eab308' : '#ef4444'}
+                strokeWidth="3"
+                strokeDasharray={`${overallProgress * 0.88} 88`}
+                strokeLinecap="round"
+                className="transition-all duration-500"
+              />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-700">
+              {overallProgress}
+            </span>
+          </div>
+          <span className="text-sm font-medium text-gray-700 hidden sm:inline">Dashboard</span>
+        </Link>
+
         {userName && (
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs md:text-sm font-medium">

@@ -14,6 +14,7 @@ interface ChatHistory {
     createdAt: string;
   }>;
   createdAt: string;
+  type: 'ask' | 'learning-path';
 }
 
 interface MainLayoutProps {
@@ -36,7 +37,7 @@ interface MainLayoutProps {
 
 const CHAT_HISTORY_KEY = 'ambisin_chat_history';
 
-function loadChatHistoryFromStorage(): Array<{
+function loadChatHistoryFromStorage(filterType?: 'ask' | 'learning-path'): Array<{
   id: string;
   title: string;
   preview?: string;
@@ -46,12 +47,17 @@ function loadChatHistoryFromStorage(): Array<{
     const stored = localStorage.getItem(CHAT_HISTORY_KEY);
     if (stored) {
       const parsed: ChatHistory[] = JSON.parse(stored);
-      return parsed.map((chat) => ({
+      const chats = parsed.map((chat) => ({
         id: chat.id,
         title: chat.title,
         preview: chat.messages[chat.messages.length - 1]?.content?.slice(0, 60),
         updatedAt: new Date(chat.createdAt),
+        type: chat.type,
       }));
+      if (filterType) {
+        return chats.filter((c) => c.type === filterType);
+      }
+      return chats;
     }
   } catch (error) {
     console.error('Error loading chat history:', error);
@@ -69,7 +75,8 @@ export default function MainLayout({ children, userName, onLogout, onNewChat, on
     updatedAt: Date;
   }>>([]);
 
-  // Use propChats if provided, otherwise load from localStorage
+  // Determine which type of chats to show based on current page
+  const isLearningPathPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/learning');
   const chats = propChats || localChats;
 
   useEffect(() => {
@@ -94,9 +101,9 @@ export default function MainLayout({ children, userName, onLogout, onNewChat, on
   // Load chat history from localStorage if no prop provided
   useEffect(() => {
     if (!propChats) {
-      setLocalChats(loadChatHistoryFromStorage());
+      setLocalChats(loadChatHistoryFromStorage(isLearningPathPage ? 'learning-path' : 'ask'));
     }
-  }, [propChats]);
+  }, [propChats, isLearningPathPage]);
 
   const handleSidebarToggle = () => {
     setSidebarOpen(!sidebarOpen);
@@ -111,11 +118,14 @@ export default function MainLayout({ children, userName, onLogout, onNewChat, on
   const handleNewChat = () => {
     if (onNewChat) {
       onNewChat();
+    } else {
+      // Navigate to home page for new chat if no handler provided
+      window.location.href = '/';
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 relative">
+    <div className="flex h-screen bg-white relative">
       {/* Mobile overlay */}
       {isMobile && sidebarOpen && (
         <div

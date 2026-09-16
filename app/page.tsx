@@ -2,12 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import MainLayout from '@/components/Layout/MainLayout';
-import FeatureSelector from '@/components/Chat/FeatureSelector';
-import MessageList from '@/components/Chat/MessageList';
+import ChatContainer from '@/components/Chat/ChatContainer';
 import { InitialQuestionsModal } from '@/components/Modal/InitialQuestionsModal';
 import { LoginPromptModal } from '@/components/Modal/LoginPromptModal';
 import Mascot from '@/components/Mascot/Mascot';
-import PersonalityModal from '@/components/Mascot/PersonalityModal';
 
 interface Message {
   id: string;
@@ -21,16 +19,17 @@ interface ChatHistory {
   title: string;
   messages: Message[];
   createdAt: Date;
+  type: 'ask' | 'learning-path';
 }
 
 const CHAT_HISTORY_KEY = 'ambisin_chat_history';
 
-function loadChatHistory(): ChatHistory[] {
+function loadChatHistory(filterType?: 'ask' | 'learning-path'): ChatHistory[] {
   try {
     const stored = localStorage.getItem(CHAT_HISTORY_KEY);
     if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed.map((chat: any) => ({
+      const parsed: ChatHistory[] = JSON.parse(stored);
+      const chats = parsed.map((chat) => ({
         ...chat,
         createdAt: new Date(chat.createdAt),
         messages: chat.messages.map((m: any) => ({
@@ -38,6 +37,10 @@ function loadChatHistory(): ChatHistory[] {
           createdAt: new Date(m.createdAt),
         })),
       }));
+      if (filterType) {
+        return chats.filter((c) => c.type === filterType);
+      }
+      return chats;
     }
   } catch (error) {
     console.error('Error loading chat history:', error);
@@ -64,20 +67,16 @@ export default function HomePage() {
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
-  const [showPersonalityModal, setShowPersonalityModal] = useState(false);
   const [mascotMessage, setMascotMessage] = useState('Halo! Saya asisten belajar Anda 🎓');
   const [mascotMood, setMascotMood] = useState<'happy' | 'thinking' | 'waving' | 'idle'>('waving');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasLoaded = useRef(false);
   const isSaving = useRef(false);
 
-  // Load chat history from localStorage on mount
   useEffect(() => {
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
-    const history = loadChatHistory();
+    const history = loadChatHistory('ask');
     setChatHistory(history);
 
     const stored = localStorage.getItem('hasCompletedInitialQuestions');
@@ -89,19 +88,10 @@ export default function HomePage() {
     }
   }, []);
 
-  // Save chat history to localStorage whenever it changes (after initial load)
   useEffect(() => {
     if (!hasLoaded.current || isSaving.current) return;
     saveChatHistory(chatHistory);
   }, [chatHistory]);
-
-  // Auto-resize textarea based on content
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
-    }
-  }, [message]);
 
   useEffect(() => {
     if (chatCount === 3) {
@@ -114,17 +104,6 @@ export default function HomePage() {
     setIsBlocked(true);
   };
 
-  const handlePersonalityComplete = (prefs: any) => {
-    localStorage.setItem('learningPreferences', JSON.stringify(prefs));
-    setShowPersonalityModal(false);
-    setMascotMessage('Terima preferensi belajarmu! 🎉');
-    setMascotMood('happy');
-  };
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
   const handleInitialQuestionsSubmit = (answers: { goal: string; topic: string; subtopic: string; difficulty: string }) => {
     localStorage.setItem('hasCompletedInitialQuestions', 'true');
     localStorage.setItem('initialAnswers', JSON.stringify(answers));
@@ -135,7 +114,6 @@ export default function HomePage() {
   const handleSendMessage = async () => {
     if (!message.trim()) return;
     
-    // Block sending if user hasn't logged in after seeing the modal
     if (isBlocked) {
       setShowLoginModal(true);
       return;
@@ -155,7 +133,6 @@ export default function HomePage() {
     setIsLoading(true);
     setChatCount((prev) => prev + 1);
 
-    // Create new chat if this is the first message
     const chatId = currentChatId || Date.now().toString();
     if (!currentChatId) {
       setCurrentChatId(chatId);
@@ -165,6 +142,7 @@ export default function HomePage() {
         title,
         messages: [userMessage],
         createdAt: new Date(),
+        type: 'ask',
       };
       isSaving.current = true;
       setChatHistory((prev) => {
@@ -174,7 +152,6 @@ export default function HomePage() {
         return updated;
       });
     } else {
-      // Update existing chat
       setChatHistory((prev) => {
         const updated = prev.map((chat) =>
           chat.id === chatId ? { ...chat, messages: updatedMessages } : chat
@@ -184,7 +161,6 @@ export default function HomePage() {
       });
     }
 
-    // Simulate AI response for now (until API is ready)
     setTimeout(() => {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -196,7 +172,6 @@ export default function HomePage() {
       setMessages(finalMessages);
       setIsLoading(false);
 
-      // Update history with assistant response
       const finalChatId = currentChatId || chatId;
       setChatHistory((prev) => {
         const updated = prev.map((chat) =>
@@ -209,7 +184,6 @@ export default function HomePage() {
   };
 
   const handleNewChat = () => {
-    // Reset for new chat
     setMessages([]);
     setChatCount(0);
     setShowLoginModal(false);
@@ -225,19 +199,6 @@ export default function HomePage() {
       setChatCount(chat.messages.filter((m) => m.role === 'user').length);
       setCurrentChatId(chat.id);
     }
-  };
-
-  const formatTime = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - new Date(date).getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Baru saja';
-    if (minutes < 60) return `${minutes}m lalu`;
-    if (hours < 24) return `${hours}h lalu`;
-    return `${days}d lalu`;
   };
 
   const handleLearningPathClick = () => {
@@ -276,76 +237,55 @@ export default function HomePage() {
         {/* Feature Selector - only when no messages */}
         {messages.length === 0 && (
           <div className="px-4 pb-4 flex-shrink-0">
-            <FeatureSelector
-              hasAnsweredQuestions={hasAnsweredQuestions}
-              onLearningPathClick={() => setShowInitialModal(true)}
-            />
-            
-            {/* Personalize CTA */}
-            <button
-              onClick={() => setShowPersonalityModal(true)}
-              className="w-full mt-4 flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+            {/* Feature Cards */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-4">
+              <button
+                onClick={() => {
+                  const textarea = document.querySelector('textarea');
+                  if (textarea) textarea.focus();
+                }}
+                className="flex-1 max-w-sm mx-auto sm:mx-0 w-full sm:w-auto bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-120 p-4 sm:p-6 border border-gray-200 hover:border-blue-300 group"
               >
-                {/* <span className="text-2xl">🎯</span> */}
-              <div className="text-left">
-                <p className="font-semibold">Personalisasi Gaya Belajar</p>
-                <p className="text-sm text-white/80">Sesuaikan pengalaman belajarmu</p>
-              </div>
-              <svg className="w-5 h-5 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+                <div className="text-3xl sm:text-4xl mb-2 sm:mb-4 group-hover:scale-110 transition-transform">
+                  💬
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 sm:mb-2">Tanya Apapun</h3>
+                <p className="text-gray-600 text-xs sm:text-sm mb-2 sm:mb-4">
+                  Bertanya tentang topik apapun yang kamu inginkan
+                </p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs sm:text-sm font-medium group-hover:bg-blue-700 transition-colors">
+                  ?
+                </div>
+              </button>
+
+              <button
+                onClick={handleLearningPathClick}
+                className="flex-1 max-w-sm mx-auto sm:mx-0 w-full sm:w-auto bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-120 p-4 sm:p-6 border border-purple-300 hover:border-purple-400 group"
+              >
+                <div className="text-3xl sm:text-4xl mb-2 sm:mb-4 group-hover:scale-110 transition-transform">
+                  📚
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 sm:mb-2">Learning Path</h3>
+                <p className="text-gray-600 text-xs sm:text-sm mb-2 sm:mb-4">
+                  Program belajar terstruktur Matematika & Informatika
+                </p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs sm:text-sm font-medium group-hover:bg-purple-700 transition-colors">
+                  📖
+                </div>
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Message List - dynamic, scrollable */}
-        <div className="flex-1 overflow-y-auto px-4 space-y-4">
-          <MessageList messages={messages} />
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg px-4 py-3 rounded-bl-none">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Chat Input - fixed at bottom */}
-        <div className="flex-shrink-0 border-t border-gray-200 bg-white p-4">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex gap-3 items-center">
-              <textarea
-                ref={textareaRef}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                placeholder="Ketik atau paste teks panjang... (Shift+Enter untuk baris baru)"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white placeholder-gray-400 min-h-[44px] max-h-[200px] overflow-y-auto no-scrollbar"
-                style={{ color: '#111827', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={!message.trim() || isLoading}
-                className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition h-full"
-              >
-                {isLoading ? '...' : 'Kirim'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-1.5 text-center">
-              Chat {chatCount}/3 &middot; Ambis.In AI
-            </p>
-          </div>
-        </div>
+        {/* Chat Container - Shared Component */}
+        <ChatContainer
+          messages={messages}
+          message={message}
+          isLoading={isLoading}
+          mode="ask"
+          onMessageChange={setMessage}
+          onSendMessage={handleSendMessage}
+        />
       </div>
 
       <InitialQuestionsModal
@@ -360,18 +300,10 @@ export default function HomePage() {
         onClose={handleContinueLater}
       />
 
-      {/* Mascot */}
       <Mascot 
         message={mascotMessage} 
         mood={mascotMood}
         showChat={true}
-      />
-
-      {/* Personality Modal */}
-      <PersonalityModal
-        isOpen={showPersonalityModal}
-        onClose={() => setShowPersonalityModal(false)}
-        onComplete={handlePersonalityComplete}
       />
     </MainLayout>
   );

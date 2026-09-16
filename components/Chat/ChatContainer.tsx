@@ -1,8 +1,7 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
-import ChatInput from './ChatInput';
-import MessageList from './MessageList';
+import { useState, useEffect, useRef } from 'react';
+import MessageList from '@/components/Chat/MessageList';
 
 interface Message {
   id: string;
@@ -12,63 +11,87 @@ interface Message {
 }
 
 interface ChatContainerProps {
-  chatTitle?: string;
   messages: Message[];
-  onSendMessage: (message: string) => void;
-  isLoading?: boolean;
+  message: string;
+  isLoading: boolean;
+  mode: 'ask' | 'learning-path';
+  onMessageChange: (msg: string) => void;
+  onSendMessage: () => void;
 }
 
 export default function ChatContainer({
-  chatTitle = 'New Chat',
   messages,
+  message,
+  isLoading,
+  mode,
+  onMessageChange,
   onSendMessage,
-  isLoading = false,
 }: ChatContainerProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
+    }
+  }, [message]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const placeholder = mode === 'learning-path'
+    ? 'Tanya tentang materi yang kamu pelajari... (Shift+Enter untuk baris baru)'
+    : 'Ketik atau paste teks panjang... (Shift+Enter untuk baris baru)';
+
   return (
-    <div className="flex flex-col h-full bg-white">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
+    <div className="flex flex-col h-full">
+      {/* Message List - dynamic, scrollable */}
+      <div className="flex-1 overflow-y-auto px-4 space-y-4">
+        <MessageList messages={messages} mode={mode} />
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 rounded-2xl px-4 py-3 rounded-bl-none">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">{chatTitle}</h2>
-            <p className="text-xs text-gray-500">
-              {messages.length > 0 ? `${messages.length} pesan` : 'Siap menjawab pertanyaanmu'}
-            </p>
-          </div>
-        </div>
-        <button className="p-2 hover:bg-gray-100 rounded-lg transition text-gray-500">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-          </svg>
-        </button>
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
-      <MessageList messages={messages} />
-
-      {isLoading && (
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-            <span className="text-sm text-gray-500">Mengirim...</span>
+      {/* Chat Input - fixed at bottom */}
+      <div className="flex-shrink-0 border-t border-gray-200 bg-white p-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex gap-3 items-center">
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => onMessageChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  onSendMessage();
+                }
+              }}
+              placeholder={placeholder}
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white placeholder-gray-400 min-h-[44px] max-h-[200px] overflow-y-auto no-scrollbar"
+              style={{ color: '#111827', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            />
+            <button
+              onClick={onSendMessage}
+              disabled={!message.trim() || isLoading}
+              className="px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition h-full"
+            >
+              {isLoading ? '...' : 'Kirim'}
+            </button>
           </div>
         </div>
-      )}
-
-      <div className="p-4 bg-white border-t border-gray-200">
-        <ChatInput onSendMessage={onSendMessage} disabled={isLoading} />
       </div>
-
-      <div ref={messagesEndRef} />
     </div>
   );
 }

@@ -11,9 +11,18 @@ interface Message {
 
 interface MessageListProps {
   messages: Message[];
+  mode?: 'ask' | 'learning-path';
 }
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, mode = 'ask' }: MessageListProps) {
+  const placeholderText = mode === 'learning-path' 
+    ? 'Belum ada percakapan. Tanya tentang materi yang sedang kamu pelajari!'
+    : 'Belum ada percakapan';
+
+  const placeholderSub = mode === 'learning-path'
+    ? 'Tanya tentang materi yang kamu kurang paham'
+    : 'Ketik pesan untuk memulai';
+
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {messages.length === 0 ? (
@@ -31,8 +40,8 @@ export function MessageList({ messages }: MessageListProps) {
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
             />
           </svg>
-          <p className="text-sm">Belum ada percakapan</p>
-          <p className="text-xs mt-1">Ketik pesan untuk memulai</p>
+          <p className="text-sm">{placeholderText}</p>
+          <p className="text-xs mt-1">{placeholderSub}</p>
         </div>
       ) : (
         messages.map((message) => (
@@ -43,7 +52,7 @@ export function MessageList({ messages }: MessageListProps) {
             }`}
           >
             <div
-              className={`max-w-2xl px-4 py-3 rounded-lg ${
+              className={`max-w-2xl px-4 py-3 rounded-2xl ${
                 message.role === 'user'
                   ? 'bg-blue-600 text-white rounded-br-none'
                   : 'bg-gray-100 text-gray-900 rounded-bl-none'
