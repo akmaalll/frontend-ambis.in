@@ -161,11 +161,37 @@ export default function HomePage() {
       });
     }
 
-    setTimeout(() => {
+    try {
+      setMascotMood('thinking');
+      setMascotMessage('Kak Ambis sedang memikirkan jawaban untukmu...');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const response = await fetch(`${baseUrl}/api/v1/ask/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: currentMessage,
+          mode: 'general',
+        }),
+      });
+
+      let assistantText = '';
+      if (response.ok) {
+        const data = await response.json();
+        assistantText = data.answer || 'Halo! Kak Ambis siap membantu belajarmu.';
+        setMascotMood('happy');
+        setMascotMessage('Semoga penjelasan Kak Ambis membantu ya! 🌟');
+      } else {
+        assistantText = 'Maaf, terjadi kendala saat menghubungi Kak Ambis. Silakan coba lagi ya!';
+        setMascotMood('idle');
+        setMascotMessage('Ada kendala sebentar, coba lagi ya.');
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Terima kasih atas pertanyaanmu: "${currentMessage}".\n\nAI Assistant sedang memproses jawaban... (Mode demo - belum terhubung ke backend AI)`,
+        content: assistantText,
         createdAt: new Date(),
       };
       const finalMessages = [...updatedMessages, assistantMessage];
@@ -180,7 +206,20 @@ export default function HomePage() {
         saveChatHistory(updated);
         return updated;
       });
-    }, 1000);
+    } catch (err) {
+      console.error('Error calling AI:', err);
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Maaf, Kak Ambis sedang offline atau tidak bisa dihubungi saat ini. Pastikan backend aktif ya!',
+        createdAt: new Date(),
+      };
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
+      setIsLoading(false);
+      setMascotMood('idle');
+      setMascotMessage('Yuk coba kirim lagi nanti.');
+    }
   };
 
   const handleNewChat = () => {
