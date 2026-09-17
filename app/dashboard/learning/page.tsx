@@ -43,6 +43,8 @@ export interface LearningPathData {
   diagnosticScore?: number;
   misconceptions?: string[];
   roadmap: RoadmapStep[];
+  roadmapReasoning?: string;
+  aiMessage?: string;
 }
 
 const CHAT_HISTORY_KEY = 'ambisin_chat_history';
@@ -158,13 +160,12 @@ function generateInitialRoadmap(subtopic: string): RoadmapStep[] {
     ];
   }
 
-  // Fallback generic roadmap for other topics
   return [
-    { id: '1', title: 'Pengenalan Konsep', description: 'Dasar dan definisi topik', type: 'lesson', completed: false, current: true, hasQuiz: false },
-    { id: '2', title: 'Teori Fundamental', description: 'Prinsip dan rumus utama', type: 'lesson', completed: false, current: false, hasQuiz: false },
-    { id: '3', title: 'Latihan Terbimbing', description: 'Latihan soal pemula & menengah', type: 'practice', completed: false, current: false, hasQuiz: true },
-    { id: '4', title: 'Aplikasi Nyata', description: 'Penerapan soal cerita kontekstual', type: 'lesson', completed: false, current: false, hasQuiz: false },
-    { id: '5', title: 'Evaluasi Akhir', description: 'Review & evaluasi pemahaman', type: 'checkpoint', completed: false, current: false, hasQuiz: true },
+    { id: 'step-1', title: 'Pengenalan Konsep', description: 'Dasar dan definisi topik', type: 'lesson', completed: false, current: true, hasQuiz: false },
+    { id: 'step-2', title: 'Teori Fundamental', description: 'Prinsip dan rumus utama', type: 'lesson', completed: false, current: false, hasQuiz: false },
+    { id: 'step-3', title: 'Latihan Terbimbing', description: 'Latihan soal pemula & menengah', type: 'practice', completed: false, current: false, hasQuiz: true },
+    { id: 'step-4', title: 'Aplikasi Nyata', description: 'Penerapan soal cerita kontekstual', type: 'lesson', completed: false, current: false, hasQuiz: false },
+    { id: 'step-5', title: 'Evaluasi Akhir', description: 'Review & evaluasi pemahaman', type: 'checkpoint', completed: false, current: false, hasQuiz: true },
   ];
 }
 
@@ -179,6 +180,10 @@ export default function LearningPathsPage() {
   const [mascotMessage, setMascotMessage] = useState('Selamat datang di Learning Path! 🎓');
   const [mascotMood, setMascotMood] = useState<'happy' | 'thinking' | 'waving' | 'idle'>('waving');
   const [showRoadmap, setShowRoadmap] = useState(true);
+
+  // Quick Prompt Chips & Proactive Intro
+  const [quickPrompts, setQuickPrompts] = useState<string[]>([]);
+  const [hasLoadedIntroForStep, setHasLoadedIntroForStep] = useState<string | null>(null);
 
   // Diagnostic & Practice Quiz State
   const [isDiagnosticMode, setIsDiagnosticMode] = useState(false);
@@ -199,7 +204,7 @@ export default function LearningPathsPage() {
     const pathData = loadLearningPathData();
     if (pathData) {
       setLearningPathData(pathData);
-      setMascotMessage(`Kamu sedang belajar ${pathData.subtopic}. Silakan tanya Kak Ambis jika ada yang ingin dipahami! 💡`);
+      setMascotMessage(`Kamu sedang belajar ${pathData.subtopic}. Kak Ambis siap menemanimu dari konsep awal sampai mahir! 💡`);
     } else {
       setShowInitialModal(true);
     }
@@ -229,6 +234,119 @@ export default function LearningPathsPage() {
     return [];
   };
 
+  const requestDynamicRoadmap = async (
+    topic: string,
+    subtopic: string,
+    goal: string,
+    difficulty: string,
+    diagnosticScore?: number,
+    misconceptions?: string[]
+  ) => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const res = await fetch(`${baseUrl}/api/v1/learning-paths/generate-roadmap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          subtopic,
+          goal,
+          difficulty,
+          diagnostic_score: diagnosticScore,
+          misconceptions,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const steps: RoadmapStep[] = data.steps.map((s: any, idx: number) => ({
+          id: s.id || `step-${idx + 1}`,
+          title: s.title,
+          description: s.description,
+          type: s.type || 'lesson',
+          completed: false,
+          current: idx === 0,
+          hasQuiz: Boolean(s.has_quiz),
+          recommendedBadge: s.recommended_badge || undefined,
+        }));
+        return {
+          steps,
+          reasoning: data.reasoning,
+          isFallback: data.is_fallback,
+          message: data.message,
+        };
+      }
+    } catch (err) {
+      console.error('Failed to call generate-roadmap:', err);
+    }
+
+    // Default fallback
+    return {
+      steps: generateInitialRoadmap(subtopic),
+      reasoning: 'Roadmap terstruktur disusun berdasarkan kurikulum acuan.',
+      isFallback: true,
+      message: 'Maaf ya, Kak Ambis sedang mengalami sedikit kendala koneksi ke server AI saat menyusun roadmap otomatis. Untuk sementara, Kak Ambis siapkan rekomendasi kurikulum standar ini ya!',
+    };
+  };
+
+  const loadProactiveLessonIntro = async (step: RoadmapStep, subtopicName: string) => {
+    if (hasLoadedIntroForStep === step.id) return;
+    setHasLoadedIntroForStep(step.id);
+
+    setIsLoading(true);
+    setMascotMood('thinking');
+    setMascotMessage(`Kak Ambis sedang menyiapkan pengantar belajar untuk ${step.title}...`);
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const res = await fetch(`${baseUrl}/api/v1/learning-paths/lesson-intro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step_title: step.title,
+          step_description: step.description,
+          topic: 'Matematika',
+          subtopic: subtopicName,
+          student_name: 'Siswa',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const introMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `${data.greeting}\n\n${data.content}`,
+          createdAt: new Date(),
+        };
+        setMessages((prev) => (prev.length === 0 ? [introMessage] : prev));
+        if (data.quick_prompts && data.quick_prompts.length > 0) {
+          setQuickPrompts(data.quick_prompts);
+        }
+        setMascotMood('happy');
+        setMascotMessage('Pengantar materi sudah siap! Klik saran pertanyaan di bawah atau tanyakan apa saja ke Kak Ambis ya!');
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to fetch proactive lesson intro:', err);
+    } finally {
+      setIsLoading(false);
+    }
+
+    // Friendly fallback if offline / error
+    const fallbackMsg: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: `Halo! Selamat datang di tahap **${step.title}**! 👋\n\nDi tahap ini kita akan membahas: ${step.description}.\n\n*Maaf ya, Kak Ambis sedang sedikit kesulitan terhubung ke server AI saat menyiapkan pembuka otomatis. Tapi tenang, kamu bisa klik saran pertanyaan cepat di bawah atau langsung tanya ke Kak Ambis!* 💡`,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => (prev.length === 0 ? [fallbackMsg] : prev));
+    setQuickPrompts([
+      'Beri contoh soal sederhana',
+      'Jelaskan konsep ini lebih santai',
+      'Aku sudah paham, mau latihan',
+    ]);
+  };
+
   const handleInitialQuestionsSubmit = async (answers: {
     goal: string;
     topic: string;
@@ -240,12 +358,22 @@ export default function LearningPathsPage() {
     setShowInitialModal(false);
 
     const conceptId = answers.subtopic === 'pecahan' ? DEFAULT_PECAHAN_CONCEPT_ID : '00000000-0000-0000-0000-000000000201';
-    const roadmap = generateInitialRoadmap(answers.subtopic);
+    
+    // Request initial AI roadmap
+    const aiRoadmap = await requestDynamicRoadmap(
+      answers.topic,
+      answers.subtopic,
+      answers.goal,
+      answers.difficulty
+    );
+
     const pathData: LearningPathData = {
       ...answers,
       conceptId,
       diagnosticCompleted: false,
-      roadmap,
+      roadmap: aiRoadmap.steps,
+      roadmapReasoning: aiRoadmap.reasoning,
+      aiMessage: aiRoadmap.isFallback ? aiRoadmap.message : undefined,
     };
 
     setLearningPathData(pathData);
@@ -276,51 +404,55 @@ export default function LearningPathsPage() {
     }
   };
 
-  const handleDiagnosticComplete = (finalMastery: number, misconceptions: string[]) => {
+  const handleDiagnosticComplete = async (finalMastery: number, misconceptions: string[]) => {
     if (!learningPathData) return;
 
-    // Adapt roadmap according to diagnostic assessment findings
-    const updatedRoadmap = learningPathData.roadmap.map((step) => {
-      // If student has misconception or mastery < 50%, highlight prerequisite foundation steps
-      if (finalMastery < 50 || misconceptions.includes('ADDS_NUM_DENOM_DIRECTLY')) {
-        if (step.id === 'step-1' || step.id === 'step-2') {
-          return {
-            ...step,
-            recommendedBadge: '🎯 Rekomendasi Kak Ambis (Fondasi Utama)',
-            current: step.id === 'step-1',
-          };
-        }
-      } else if (finalMastery >= 75) {
-        // If student already has high baseline, prerequisite steps are tested out
-        if (step.id === 'step-1' || step.id === 'step-2') {
-          return { ...step, completed: true, current: false };
-        }
-        if (step.id === 'step-3') {
-          return { ...step, current: true };
-        }
-      }
-      return step;
-    });
+    // Call dynamic roadmap generation with diagnostic assessment findings
+    const aiRoadmap = await requestDynamicRoadmap(
+      learningPathData.topic,
+      learningPathData.subtopic,
+      learningPathData.goal,
+      learningPathData.difficulty,
+      finalMastery,
+      misconceptions
+    );
 
     const updatedData: LearningPathData = {
       ...learningPathData,
       diagnosticCompleted: true,
       diagnosticScore: finalMastery,
       misconceptions,
-      roadmap: updatedRoadmap,
+      roadmap: aiRoadmap.steps,
+      roadmapReasoning: aiRoadmap.reasoning,
+      aiMessage: aiRoadmap.isFallback ? aiRoadmap.message : undefined,
     };
 
     setLearningPathData(updatedData);
     saveLearningPathData(updatedData);
     updateStudentProgressStorage('pecahan', 'Pecahan', finalMastery);
 
-    setMascotMessage(`Asesmen diagnostik selesai! Penguasaan awalmu: ${finalMastery}%. Roadmap belajar telah disesuaikan! 🌟`);
+    setMascotMessage(`Asesmen diagnostik selesai! Penguasaan awalmu: ${finalMastery}%. Roadmap belajar telah dipersonalisasi oleh AI! 🌟`);
     setMascotMood('happy');
   };
 
   const handleCloseDiagnostic = () => {
     setIsDiagnosticMode(false);
     setShowRoadmap(true);
+  };
+
+  const handleEnterStepChat = (step: RoadmapStep) => {
+    if (!learningPathData) return;
+    // Set step as current
+    const updatedRoadmap = learningPathData.roadmap.map((s) => ({
+      ...s,
+      current: s.id === step.id,
+    }));
+    const updatedData = { ...learningPathData, roadmap: updatedRoadmap };
+    setLearningPathData(updatedData);
+    saveLearningPathData(updatedData);
+
+    setShowRoadmap(false);
+    loadProactiveLessonIntro(step, learningPathData.subtopic);
   };
 
   const handleTakePracticeQuiz = async (step: RoadmapStep) => {
@@ -367,19 +499,20 @@ export default function LearningPathsPage() {
     setShowRoadmap(true);
   };
 
-  const handleSendMessage = async () => {
-    if (!message.trim()) return;
-    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: message, createdAt: new Date() };
+  const handleSendMessage = async (overrideMsg?: string) => {
+    const textToSend = (overrideMsg || message).trim();
+    if (!textToSend) return;
+
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: textToSend, createdAt: new Date() };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
-    const currentMessage = message;
     setMessage('');
     setIsLoading(true);
 
     const chatId = currentChatId || Date.now().toString();
     if (!currentChatId) {
       setCurrentChatId(chatId);
-      const title = message.slice(0, 40) + (message.length > 40 ? '...' : '');
+      const title = textToSend.slice(0, 40) + (textToSend.length > 40 ? '...' : '');
       const newHistory: ChatHistory = { id: chatId, title, messages: [userMessage], createdAt: new Date(), type: 'learning-path' };
       isSaving.current = true;
       setChatHistory((prev) => { const updated = [newHistory, ...prev]; saveChatHistory(updated); setTimeout(() => { isSaving.current = false; }, 0); return updated; });
@@ -398,7 +531,7 @@ export default function LearningPathsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          question: `${stepContext}${currentMessage}`,
+          question: `${stepContext}${textToSend}`,
           mode: 'learning_path',
         }),
       });
@@ -408,7 +541,7 @@ export default function LearningPathsPage() {
         const data = await response.json();
         assistantText = data.answer || data.response || 'Jawaban berhasil diterima dari Kak Ambis.';
       } else {
-        assistantText = `Halo! Kak Ambis mendengar pertanyaanmu: "${currentMessage}". Namun server AI sedang sibuk. Coba tanyakan sekali lagi ya!`;
+        assistantText = `Halo! Kak Ambis mendengar pertanyaanmu: "${textToSend}". Maaf ya, server AI sedang sedikit sibuk. Coba tanyakan sekali lagi ya!`;
       }
 
       const assistantMessage: Message = {
@@ -427,12 +560,12 @@ export default function LearningPathsPage() {
         return updated;
       });
       setMascotMood('happy');
-      setMascotMessage('Semoga penjelasannya jelas ya! Kalau ada langkah yang masih bingung, tanyakan lagi yuk!');
+      setMascotMessage('Semoga penjelasannya jelas ya! Kalau ada bagian yang belum paham, tanyakan saja lagi!');
     } catch {
       const fallbackMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Halo! Kak Ambis sedang memproses materi pada tahap "${learningPathData?.subtopic}". Periksa koneksi lokalmu ya!`,
+        content: `Halo! Kak Ambis mendengar pertanyaanmu. Maaf ya, koneksi ke server AI sedang terganggu. Periksa koneksi lokalmu ya!`,
         createdAt: new Date(),
       };
       setMessages([...updatedMessages, fallbackMessage]);
@@ -517,14 +650,14 @@ export default function LearningPathsPage() {
           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-gradient-to-br from-blue-50 via-white to-purple-50">
             <div className="max-w-4xl mx-auto">
               {/* Header */}
-              <div className="text-center mb-8">
+              <div className="text-center mb-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
-                  <span>🗺️ Mode 1: Learning Path</span>
+                  <span>🗺️ Mode 1: Guided Learning Path</span>
                 </div>
-                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
+                <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mb-1.5">
                   Roadmap Belajar: {learningPathData.subtopic.toUpperCase()}
                 </h1>
-                <p className="text-gray-600 text-sm max-w-lg mx-auto">
+                <p className="text-gray-600 text-xs sm:text-sm max-w-lg mx-auto">
                   Target: {learningPathData.goal || 'Penguasaan Konsep Mandiri'} • Level:{' '}
                   {learningPathData.difficulty === 'beginner'
                     ? 'Pemula'
@@ -534,22 +667,52 @@ export default function LearningPathsPage() {
                 </p>
               </div>
 
+              {/* AI Reasoning / Decision Banner */}
+              {learningPathData.roadmapReasoning && (
+                <div className="mb-6 p-4 rounded-2xl bg-indigo-50/90 border border-indigo-200 flex items-start gap-3 shadow-2xs">
+                  <span className="text-2xl shrink-0">🧠</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                      Analisis & Keputusan Kurikulum Personal Kak Ambis:
+                    </h4>
+                    <p className="text-xs text-indigo-800 mt-1 leading-relaxed">
+                      {learningPathData.roadmapReasoning}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Connection Apology Banner (If fallback occurred) */}
+              {learningPathData.aiMessage && (
+                <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3 shadow-2xs">
+                  <span className="text-2xl shrink-0">⚠️</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                      Informasi Sambungan AI:
+                    </h4>
+                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                      {learningPathData.aiMessage}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Diagnostic Banner (If not yet completed) */}
               {!learningPathData.diagnosticCompleted && (
-                <div className="mb-8 p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <span className="text-3xl">🔍</span>
                     <div>
                       <h3 className="font-bold text-gray-900 text-sm">Tes Diagnostik Belum Dikerjakan</h3>
                       <p className="text-xs text-gray-600 mt-0.5">
-                        Yuk kerjakan 2 soal cepat untuk memetakan kekuatan & celah pemahamanmu agar Kak Ambis bisa menyesuaikan materi!
+                        Yuk kerjakan 2 soal cepat agar Kak Ambis bisa memetakan miskonsepsi dan menyusun roadmap yang pas buat kamu!
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={handleStartDiagnostic}
                     disabled={isFetchingExercises}
-                    className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition shrink-0"
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition shrink-0 cursor-pointer"
                   >
                     {isFetchingExercises ? 'Memuat Soal...' : 'Mulai Tes Diagnostik ⚡'}
                   </button>
@@ -558,22 +721,22 @@ export default function LearningPathsPage() {
 
               {/* Diagnostic Result Banner (If completed) */}
               {learningPathData.diagnosticCompleted && (
-                <div className="mb-8 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+                <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between shadow-2xs">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">✅</span>
                     <div>
                       <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider">
-                        Hasil Diagnostik Awal Telah Diterapkan
+                        Hasil Diagnostik Berhasil Dipetakan
                       </span>
                       <p className="text-xs text-emerald-700 mt-0.5">
                         Baseline Mastery:{' '}
-                        <span className="font-bold">{learningPathData.diagnosticScore || 0}%</span>. Roadmap telah dipersonalisasi!
+                        <span className="font-bold">{learningPathData.diagnosticScore || 0}%</span>. Roadmap telah dipersonalisasi AI!
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={handleStartDiagnostic}
-                    className="text-xs text-emerald-800 hover:text-emerald-950 font-semibold underline"
+                    className="text-xs text-emerald-800 hover:text-emerald-950 font-semibold underline cursor-pointer"
                   >
                     Ulangi Tes
                   </button>
@@ -646,7 +809,7 @@ export default function LearningPathsPage() {
                           {step.hasQuiz ? (
                             <button
                               onClick={() => handleTakePracticeQuiz(step)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                                 isCompleted
                                   ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                                   : isCurrent
@@ -659,8 +822,8 @@ export default function LearningPathsPage() {
                             </button>
                           ) : (
                             <button
-                              onClick={() => setShowRoadmap(false)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                              onClick={() => handleEnterStepChat(step)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                                 isCurrent
                                   ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
                                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -692,20 +855,22 @@ export default function LearningPathsPage() {
               </div>
 
               {/* Bottom CTA to Chat */}
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => setShowRoadmap(false)}
-                  className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition flex items-center gap-2 mx-auto"
-                >
-                  <span>Mulai Tanya Kak Ambis Seputar Materi</span>
-                  <span>💬</span>
-                </button>
-              </div>
+              {currentStep && (
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={() => handleEnterStepChat(currentStep)}
+                    className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition flex items-center gap-2 mx-auto cursor-pointer"
+                  >
+                    <span>Masuk ke Tahap: {currentStep.title}</span>
+                    <span>💬</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* VIEW 4: Interactive Chat Mode */}
+        {/* VIEW 4: Interactive Chat Mode (Never Blank!) */}
         {!isDiagnosticMode && !isPracticeMode && (!showRoadmap || !learningPathData) && (
           <>
             {learningPathData && currentStep && (
@@ -723,14 +888,14 @@ export default function LearningPathsPage() {
                     {currentStep.hasQuiz && (
                       <button
                         onClick={() => handleTakePracticeQuiz(currentStep)}
-                        className="px-3 py-1 bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold rounded-lg text-xs transition"
+                        className="px-3 py-1 bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold rounded-lg text-xs transition cursor-pointer"
                       >
                         Kerjakan Soal ✏️
                       </button>
                     )}
                     <button
                       onClick={() => setShowRoadmap(true)}
-                      className="px-3 py-1 text-xs text-blue-600 hover:text-blue-800 font-bold bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                      className="px-3 py-1 text-xs text-blue-600 hover:text-blue-800 font-bold bg-blue-50 hover:bg-blue-100 rounded-lg transition cursor-pointer"
                     >
                       Lihat Roadmap 🗺️
                     </button>
@@ -743,6 +908,8 @@ export default function LearningPathsPage() {
               message={message}
               isLoading={isLoading}
               mode="learning-path"
+              quickPrompts={quickPrompts}
+              onQuickPromptClick={(prompt) => handleSendMessage(prompt)}
               onMessageChange={setMessage}
               onSendMessage={handleSendMessage}
             />
