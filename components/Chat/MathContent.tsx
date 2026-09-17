@@ -160,9 +160,6 @@ export default function MathContent({ content, isUser = false }: MathContentProp
             >
               <div className="flex items-center justify-between mb-2 pb-1 border-b border-blue-100">
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-xs">
-                    📐
-                  </span>
                   Kotak Rumus & Perhitungan
                 </span>
                 <span className="text-[10px] text-blue-500/80 font-mono uppercase tracking-wider">
