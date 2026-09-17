@@ -17,7 +17,8 @@ export interface ExerciseItem {
 interface QuizProps {
   questions: ExerciseItem[];
   conceptTitle?: string;
-  onComplete?: (finalMastery: number) => void;
+  isDiagnostic?: boolean;
+  onComplete?: (finalMastery: number, misconceptions: string[]) => void;
   onClose?: () => void;
 }
 
@@ -37,6 +38,7 @@ interface AgentFeedback {
 export function Quiz({
   questions,
   conceptTitle = 'Latihan Interaktif',
+  isDiagnostic = false,
   onComplete,
   onClose,
 }: QuizProps) {
@@ -48,6 +50,7 @@ export function Quiz({
   const [attemptsPerQuestion, setAttemptsPerQuestion] = useState<Record<number, number>>({});
   const [completedQuestions, setCompletedQuestions] = useState<Record<number, boolean>>({});
   const [latestMastery, setLatestMastery] = useState<number>(0.3);
+  const [detectedMisconceptions, setDetectedMisconceptions] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
 
   const currentQuestion = questions[currentIndex];
@@ -89,7 +92,7 @@ export function Quiz({
           student_id: '00000000-0000-0000-0000-000000000901',
           exercise_id: currentQuestion.id,
           student_answer: answer,
-          mode: 'learning_path',
+          mode: isDiagnostic ? 'diagnostic' : 'learning_path',
           stream: false,
         }),
       });
@@ -99,6 +102,11 @@ export function Quiz({
         setFeedback(data);
         if (data.mastery !== undefined) {
           setLatestMastery(data.mastery);
+        }
+        if (data.misconception_code) {
+          setDetectedMisconceptions((prev) =>
+            prev.includes(data.misconception_code!) ? prev : [...prev, data.misconception_code!]
+          );
         }
         if (data.is_correct) {
           setCompletedQuestions((prev) => ({ ...prev, [currentIndex]: true }));
@@ -149,7 +157,7 @@ export function Quiz({
     if (isLastQuestion) {
       setIsFinished(true);
       if (onComplete) {
-        onComplete(Math.round(latestMastery * 100));
+        onComplete(Math.round(latestMastery * 100), detectedMisconceptions);
       }
     } else {
       setCurrentIndex((prev) => prev + 1);
@@ -165,24 +173,41 @@ export function Quiz({
     setFeedback(null);
   };
 
+  const getMisconceptionExplanation = (code: string): string => {
+    switch (code) {
+      case 'ADDS_NUM_DENOM_DIRECTLY':
+        return 'Cenderung menjumlahkan pembilang dan penyebut secara langsung (contoh: 1/2 + 1/3 = 2/5). Kita perlu memperkuat fondasi penyamaan penyebut dengan KPK.';
+      case 'WRONG_LCM':
+        return 'Keliru dalam mencari Kelipatan Persekutuan Terkecil (KPK) untuk menyamakan penyebut.';
+      case 'FAILS_TO_SIMPLIFY':
+        return 'Perhitungan sudah tepat namun belum menyederhanakan pecahan ke bentuk paling sederhana.';
+      case 'CROSS_MULTIPLY_AS_ADD':
+        return 'Tertukar antara operasi perkalian silang dan penjumlahan pecahan.';
+      default:
+        return 'Perlu penguatan langkah-langkah dasar operasi pecahan.';
+    }
+  };
+
   if (isFinished) {
     const masteryPercent = Math.min(Math.round(latestMastery * 100), 100);
     return (
-      <div className="bg-white rounded-2xl shadow-xl p-8 text-center border border-gray-100 max-w-xl mx-auto">
-        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl mx-auto mb-4">
-          🎓
+      <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 text-center border border-gray-100 max-w-xl mx-auto">
+        <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-3xl mx-auto mb-4">
+          {isDiagnostic ? '🔍' : '🎓'}
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Hebat! Sesi Belajar Selesai
+          {isDiagnostic ? 'Hasil Pemetaan Diagnostik Selesai' : 'Hebat! Sesi Belajar Selesai'}
         </h2>
         <p className="text-gray-600 text-sm mb-6">
-          Kamu telah menyelesaikan latihan pada konsep <span className="font-semibold text-blue-600">{conceptTitle}</span>.
+          {isDiagnostic
+            ? `Kak Ambis telah memetakan kemampuan awalmu pada konsep ${conceptTitle}.`
+            : `Kamu telah menyelesaikan latihan pada konsep ${conceptTitle}.`}
         </p>
 
         {/* Mastery Card */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 mb-6">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 mb-5 text-left">
           <div className="flex items-center justify-between text-xs font-semibold text-blue-700 mb-2">
-            <span>Tingkat Pemahaman (Mastery State)</span>
+            <span>{isDiagnostic ? 'Baseline Penguasaan Konsep' : 'Tingkat Pemahaman (Mastery State)'}</span>
             <span className="text-sm font-bold text-blue-900">{masteryPercent}%</span>
           </div>
           <div className="w-full h-3 bg-blue-100 rounded-full overflow-hidden">
@@ -191,20 +216,52 @@ export function Quiz({
               style={{ width: `${masteryPercent}%` }}
             />
           </div>
-          <p className="text-xs text-blue-600 mt-2 text-left">
-            {masteryPercent >= 70
-              ? '🌟 Pemahaman konsepmu sangat baik! Kamu siap lanjut ke materi berikutnya.'
-              : '💪 Sudah bagus! Terus asah pemahamanmu dengan latihan tambahan ya.'}
+          <p className="text-xs text-blue-600 mt-2">
+            {isDiagnostic
+              ? masteryPercent >= 60
+                ? '🌟 Pemahaman awalmu cukup bagus! Beberapa konsep pengayaan telah ditambahkan ke roadmap.'
+                : '💡 Kak Ambis telah menyesuaikan urutan roadmap agar materi fondasi dasar diajarkan bertahap.'
+              : masteryPercent >= 70
+              ? '🌟 Pemahaman konsepmu sangat baik! Kamu siap lanjut ke tahap berikutnya.'
+              : '💪 Sudah bagus! Terus asah pemahamanmu dengan latihan terbimbing ya.'}
           </p>
         </div>
+
+        {/* Diagnostic Insights / Misconceptions */}
+        {isDiagnostic && (
+          <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-left">
+            <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>Fokus Bimbingan Kak Ambis:</span>
+            </h4>
+            {detectedMisconceptions.length > 0 ? (
+              <ul className="space-y-2 text-xs text-amber-950">
+                {detectedMisconceptions.map((code) => (
+                  <li key={code} className="flex items-start gap-2 bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                    <span className="text-amber-600 font-bold shrink-0">•</span>
+                    <span>{getMisconceptionExplanation(code)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-amber-900">
+                Tidak terdeteksi miskonsepsi mendasar. Kamu siap langsung memahami materi inti dan menyelesaikan latihan soal!
+              </p>
+            )}
+            <p className="text-[11px] text-amber-700 mt-2 font-medium">
+              ✨ Roadmap belajarmu telah disesuaikan berdasarkan analisis di atas.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-3 justify-center">
           {onClose && (
             <button
               onClick={onClose}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-md transition flex items-center gap-2"
             >
-              Lanjut ke Roadmap ➡️
+              <span>{isDiagnostic ? 'Buka Roadmap Belajar yang Disesuaikan' : 'Lanjut ke Roadmap'}</span>
+              <span>🚀</span>
             </button>
           )}
         </div>
@@ -218,6 +275,17 @@ export function Quiz({
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden max-w-2xl mx-auto transition-all">
+      {/* Mode Diagnostic Alert */}
+      {isDiagnostic && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-2.5 text-white flex items-center justify-between text-xs font-semibold">
+          <div className="flex items-center gap-2">
+            <span>🔍</span>
+            <span>Tes Diagnostik Awal — Pemetaan Kemampuan Belajar</span>
+          </div>
+          <span className="bg-white/20 px-2 py-0.5 rounded text-[11px]">Tidak Mengurangi Nilai</span>
+        </div>
+      )}
+
       {/* Quiz Header */}
       <div className="px-6 py-4 bg-gray-50/90 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -225,7 +293,7 @@ export function Quiz({
             {currentIndex + 1}
           </span>
           <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-            Soal {currentIndex + 1} dari {questions.length}
+            {isDiagnostic ? 'Pertanyaan Diagnostik' : 'Soal'} {currentIndex + 1} dari {questions.length}
           </span>
         </div>
         <div className="flex items-center gap-2">
