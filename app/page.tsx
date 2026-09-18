@@ -1,69 +1,349 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect, useRef } from 'react';
+import MainLayout from '@/components/Layout/MainLayout';
+import ChatContainer from '@/components/Chat/ChatContainer';
+import { InitialQuestionsModal } from '@/components/Modal/InitialQuestionsModal';
+import { LoginPromptModal } from '@/components/Modal/LoginPromptModal';
+import Mascot from '@/components/Mascot/Mascot';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: Date;
+}
+
+interface ChatHistory {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: Date;
+  type: 'ask' | 'learning-path';
+}
+
+const CHAT_HISTORY_KEY = 'ambisin_chat_history';
+
+function loadChatHistory(filterType?: 'ask' | 'learning-path'): ChatHistory[] {
+  try {
+    const stored = localStorage.getItem(CHAT_HISTORY_KEY);
+    if (stored) {
+      const parsed: ChatHistory[] = JSON.parse(stored);
+      const chats = parsed.map((chat) => ({
+        ...chat,
+        createdAt: new Date(chat.createdAt),
+        messages: chat.messages.map((m: any) => ({
+          ...m,
+          createdAt: new Date(m.createdAt),
+        })),
+      }));
+      if (filterType) {
+        return chats.filter((c) => c.type === filterType);
+      }
+      return chats;
+    }
+  } catch (error) {
+    console.error('Error loading chat history:', error);
+  }
+  return [];
+}
+
+function saveChatHistory(history: ChatHistory[]) {
+  try {
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history));
+  } catch (error) {
+    console.error('Error saving chat history:', error);
+  }
+}
+
+export default function HomePage() {
+  const [showInitialModal, setShowInitialModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [chatCount, setChatCount] = useState(0);
+  const [hasAnsweredQuestions, setHasAnsweredQuestions] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [mascotMessage, setMascotMessage] = useState('Halo! Saya asisten belajar Anda 🎓');
+  const [mascotMood, setMascotMood] = useState<'happy' | 'thinking' | 'waving' | 'idle'>('waving');
+  const hasLoaded = useRef(false);
+  const isSaving = useRef(false);
+
+  useEffect(() => {
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
+
+    const history = loadChatHistory('ask');
+    setChatHistory(history);
+
+    const stored = localStorage.getItem('hasCompletedInitialQuestions');
+    if (stored === 'true') {
+      setHasAnsweredQuestions(true);
+      setShowInitialModal(false);
+    } else {
+      setShowInitialModal(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoaded.current || isSaving.current) return;
+    saveChatHistory(chatHistory);
+  }, [chatHistory]);
+
+  useEffect(() => {
+    if (chatCount === 3) {
+      setShowLoginModal(true);
+    }
+  }, [chatCount]);
+
+  const handleContinueLater = () => {
+    setShowLoginModal(false);
+    setIsBlocked(true);
+  };
+
+  const handleInitialQuestionsSubmit = (answers: { goal: string; topic: string; subtopic: string; difficulty: string }) => {
+    localStorage.setItem('hasCompletedInitialQuestions', 'true');
+    localStorage.setItem('initialAnswers', JSON.stringify(answers));
+    setHasAnsweredQuestions(true);
+    setShowInitialModal(false);
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim()) return;
+
+    if (isBlocked) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: message,
+      createdAt: new Date(),
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
+    const currentMessage = message;
+    setMessage('');
+    setIsLoading(true);
+    setChatCount((prev) => prev + 1);
+
+    const chatId = currentChatId || Date.now().toString();
+    if (!currentChatId) {
+      setCurrentChatId(chatId);
+      const title = message.slice(0, 40) + (message.length > 40 ? '...' : '');
+      const newHistory: ChatHistory = {
+        id: chatId,
+        title,
+        messages: [userMessage],
+        createdAt: new Date(),
+        type: 'ask',
+      };
+      isSaving.current = true;
+      setChatHistory((prev) => {
+        const updated = [newHistory, ...prev];
+        saveChatHistory(updated);
+        setTimeout(() => { isSaving.current = false; }, 0);
+        return updated;
+      });
+    } else {
+      setChatHistory((prev) => {
+        const updated = prev.map((chat) =>
+          chat.id === chatId ? { ...chat, messages: updatedMessages } : chat
+        );
+        saveChatHistory(updated);
+        return updated;
+      });
+    }
+
+    try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const response = await fetch(`${apiBaseUrl}/api/v1/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: currentMessage,
+          mode: 'general',
+          context: '',
+        }),
+      });
+
+      let assistantAnswer = 'Maaf, terjadi kesalahan pada sistem. Harap coba lagi nanti.';
+      if (response.ok) {
+        const data = await response.json();
+        assistantAnswer = data.answer || assistantAnswer;
+      }
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: assistantAnswer,
+        createdAt: new Date(),
+      };
+
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
+      setIsLoading(false);
+
+      const finalChatId = currentChatId || chatId;
+      setChatHistory((prev) => {
+        const updated = prev.map((chat) =>
+          chat.id === finalChatId ? { ...chat, messages: finalMessages } : chat
+        );
+        saveChatHistory(updated);
+        return updated;
+      });
+    } catch (error) {
+      console.error('Error calling backend:', error);
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Maaf, terjadi kesalahan pada sistem. Harap coba lagi nanti.',
+        createdAt: new Date(),
+      };
+
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
+      setIsLoading(false);
+
+      const finalChatId = currentChatId || chatId;
+      setChatHistory((prev) => {
+        const updated = prev.map((chat) =>
+          chat.id === finalChatId ? { ...chat, messages: finalMessages } : chat
+        );
+        saveChatHistory(updated);
+        return updated;
+      });
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setChatCount(0);
+    setShowLoginModal(false);
+    setMessage('');
+    setCurrentChatId(null);
+    setIsBlocked(false);
+  };
+
+  const handleSelectChat = (chatId: string) => {
+    const chat = chatHistory.find((c) => c.id === chatId);
+    if (chat) {
+      setMessages(chat.messages);
+      setChatCount(chat.messages.filter((m) => m.role === 'user').length);
+      setCurrentChatId(chat.id);
+    }
+  };
+
+  const handleLearningPathClick = () => {
+    if (hasAnsweredQuestions) {
+      window.location.href = '/dashboard/learning';
+    } else {
+      setShowInitialModal(true);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <MainLayout
+      onNewChat={handleNewChat}
+      onSelectChat={handleSelectChat}
+      onLearningPathClick={handleLearningPathClick}
+      chats={chatHistory.map((c) => ({
+        id: c.id,
+        title: c.title,
+        preview: c.messages[c.messages.length - 1]?.content?.slice(0, 60),
+        updatedAt: c.createdAt,
+      }))}
+    >
+      <div className="flex flex-col h-full">
+        {/* Header info - only show when no messages */}
+        {messages.length === 0 && (
+          <div className="text-center py-4 md:py-6 px-4 flex-shrink-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">
+              Halo! Apa yang ingin kamu lakukan hari ini?
+            </h1>
+            <p className="text-gray-500 text-xs md:text-sm">
+              Pilih fitur atau langsung ketik pesan di bawah
+            </p>
+          </div>
+        )}
+
+        {/* Feature Selector - only when no messages */}
+        {messages.length === 0 && (
+          <div className="px-4 pb-4 flex-shrink-0">
+            {/* Feature Cards */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-4">
+              <button
+                onClick={() => {
+                  const textarea = document.querySelector('textarea');
+                  if (textarea) textarea.focus();
+                }}
+                className="flex-1 max-w-sm mx-auto sm:mx-0 w-full sm:w-auto bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-120 p-4 sm:p-6 border border-gray-200 hover:border-blue-300 group"
+              >
+                <div className="text-3xl sm:text-4xl mb-2 sm:mb-4 group-hover:scale-110 transition-transform">
+                  💬
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 sm:mb-2">Tanya Apapun</h3>
+                <p className="text-gray-600 text-xs sm:text-sm mb-2 sm:mb-4">
+                  Bertanya tentang topik apapun yang kamu inginkan
+                </p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs sm:text-sm font-medium group-hover:bg-blue-700 transition-colors">
+                  ?
+                </div>
+              </button>
+
+              <button
+                onClick={handleLearningPathClick}
+                className="flex-1 max-w-sm mx-auto sm:mx-0 w-full sm:w-auto bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-120 p-4 sm:p-6 border border-purple-300 hover:border-purple-400 group"
+              >
+                <div className="text-3xl sm:text-4xl mb-2 sm:mb-4 group-hover:scale-110 transition-transform">
+                  📚
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1 sm:mb-2">Learning Path</h3>
+                <p className="text-gray-600 text-xs sm:text-sm mb-2 sm:mb-4">
+                  Program belajar terstruktur Matematika & Informatika
+                </p>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs sm:text-sm font-medium group-hover:bg-purple-700 transition-colors">
+                  📖
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Chat Container - Shared Component */}
+        <ChatContainer
+          messages={messages}
+          message={message}
+          isLoading={isLoading}
+          mode="ask"
+          onMessageChange={setMessage}
+          onSendMessage={handleSendMessage}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+
+      <InitialQuestionsModal
+        isOpen={showInitialModal}
+        onClose={() => setShowInitialModal(false)}
+        onSkip={() => setShowInitialModal(false)}
+        onSubmit={handleInitialQuestionsSubmit}
+      />
+
+      <LoginPromptModal
+        isOpen={showLoginModal}
+        onClose={handleContinueLater}
+      />
+
+      <Mascot 
+        message={mascotMessage} 
+        mood={mascotMood}
+        showChat={true}
+      />
+    </MainLayout>
   );
 }
