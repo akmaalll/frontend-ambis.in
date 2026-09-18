@@ -113,7 +113,7 @@ export default function HomePage() {
 
   const handleSendMessage = async () => {
     if (!message.trim()) return;
-    
+
     if (isBlocked) {
       setShowLoginModal(true);
       return;
@@ -161,13 +161,31 @@ export default function HomePage() {
       });
     }
 
-    setTimeout(() => {
+    try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const response = await fetch(`${apiBaseUrl}/api/v1/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: currentMessage,
+          mode: 'general',
+          context: '',
+        }),
+      });
+
+      let assistantAnswer = 'Maaf, terjadi kesalahan pada sistem. Harap coba lagi nanti.';
+      if (response.ok) {
+        const data = await response.json();
+        assistantAnswer = data.answer || assistantAnswer;
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Terima kasih atas pertanyaanmu: "${currentMessage}".\n\nAI Assistant sedang memproses jawaban... (Mode demo - belum terhubung ke backend AI)`,
+        content: assistantAnswer,
         createdAt: new Date(),
       };
+
       const finalMessages = [...updatedMessages, assistantMessage];
       setMessages(finalMessages);
       setIsLoading(false);
@@ -180,7 +198,28 @@ export default function HomePage() {
         saveChatHistory(updated);
         return updated;
       });
-    }, 1000);
+    } catch (error) {
+      console.error('Error calling backend:', error);
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Maaf, terjadi kesalahan pada sistem. Harap coba lagi nanti.',
+        createdAt: new Date(),
+      };
+
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
+      setIsLoading(false);
+
+      const finalChatId = currentChatId || chatId;
+      setChatHistory((prev) => {
+        const updated = prev.map((chat) =>
+          chat.id === finalChatId ? { ...chat, messages: finalMessages } : chat
+        );
+        saveChatHistory(updated);
+        return updated;
+      });
+    }
   };
 
   const handleNewChat = () => {

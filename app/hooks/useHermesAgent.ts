@@ -101,32 +101,26 @@ export function useHermesAgent(options?: UseHermesAgentOptions): UseHermesAgentR
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
+      // Map FE mode ke backend mode, lalu hubungi /api/v1/ask/ (non-streaming)
       const baseUrl =
         options?.apiBaseUrl ||
         process.env.NEXT_PUBLIC_API_URL ||
         'http://localhost:8001';
-      const endpoint = `${baseUrl}/api/v1/agent/hermes`;
 
-      const requestPayload = {
-        user_id: '123e4567-e89b-12d3-a456-426614174000',
-        prompt: prompt.trim(),
-        mode,
-        context_window: {
-          scaffold_level: activeScaffold,
-          current_topic: context?.current_topic || 'Matematika & Pemecahan Masalah',
-          ...context,
-        },
-        stream: true,
-      };
+      const backendMode = mode === 'ask' ? 'general' : (mode as 'learning_path' | 'code' | 'productivity_task');
+      const askEndpoint = `${baseUrl}/api/v1/ask/`;
 
       try {
-        const response = await fetch(endpoint, {
+        const response = await fetch(askEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
           },
-          body: JSON.stringify(requestPayload),
+          body: JSON.stringify({
+            question: prompt.trim(),
+            context: context ? JSON.stringify(context) : '',
+            mode: backendMode,
+          }),
           signal: controller.signal,
         });
 
@@ -134,114 +128,15 @@ export function useHermesAgent(options?: UseHermesAgentOptions): UseHermesAgentR
           throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
         }
 
-        if (!response.body) {
-          throw new Error('ReadableStream is not supported by response');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // SSE blocks are delimited by two newlines
-          const messages = buffer.split('\n\n');
-          // Keep whatever is after the last delimiter in the buffer
-          buffer = messages.pop() || '';
-
-          for (const rawMessage of messages) {
-            if (!rawMessage.trim()) continue;
-
-            const lines = rawMessage.split('\n');
-            let eventType = 'message';
-            let dataStr = '';
-
-            for (const line of lines) {
-              if (line.startsWith('event:')) {
-                eventType = line.slice(6).trim();
-              } else if (line.startsWith('data:')) {
-                dataStr += line.slice(5).trim();
-              }
-            }
-
-            if (!dataStr) continue;
-
-            try {
-              const data = JSON.parse(dataStr);
-
-              switch (eventType) {
-                case 'thinking': {
-                  setIsThinking(true);
-                  if (data.thought) {
-                    setThoughts((prev) => [...prev, data.thought]);
-                  }
-                  break;
-                }
-                case 'tool_call': {
-                  setIsThinking(true);
-                  setToolCalls((prev) => [
-                    ...prev,
-                    {
-                      tool_name: data.tool_name,
-                      arguments: data.arguments,
-                    },
-                  ]);
-                  break;
-                }
-                case 'tool_result': {
-                  setToolCalls((prev) =>
-                    prev.map((tc) =>
-                      tc.tool_name === data.tool_name
-                        ? { ...tc, status: data.status, output: data.output }
-                        : tc
-                    )
-                  );
-                  break;
-                }
-                case 'token': {
-                  setIsThinking(false);
-                  if (typeof data.chunk === 'string') {
-                    setContent((prev) => prev + data.chunk);
-                  }
-                  break;
-                }
-                case 'done': {
-                  setIsThinking(false);
-                  setIsStreaming(false);
-                  if (typeof data.scaffold_level === 'number') {
-                    setScaffoldLevel(data.scaffold_level);
-                  }
-                  break;
-                }
-                case 'error': {
-                  setIsThinking(false);
-                  setIsStreaming(false);
-                  setError(data.message || 'Terjadi kesalahan pada reasoning agent');
-                  break;
-                }
-                default: {
-                  if (data.chunk) {
-                    setIsThinking(false);
-                    setContent((prev) => prev + data.chunk);
-                  }
-                  break;
-                }
-              }
-            } catch (jsonErr) {
-              console.warn('Failed to parse SSE JSON chunk:', dataStr, jsonErr);
-            }
-          }
-        }
+        const data = await response.json();
+        setContent(data.answer || '');
+        setIsThinking(false);
+        setIsStreaming(false);
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') {
-          // Stream was manually aborted, do not flag as unexpected error
           return;
         }
-        const errorMessage = err instanceof Error ? err.message : 'Gagal menghubungi Hermes Agent';
+        const errorMessage = err instanceof Error ? err.message : 'Gagal menghubungi AI';
         setError(errorMessage);
         setIsStreaming(false);
         setIsThinking(false);
